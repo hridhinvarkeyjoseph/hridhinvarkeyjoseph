@@ -27,7 +27,7 @@ USER = os.environ.get("PROFILE_USER", "hridhinvarkeyjoseph")
 NAME = "Hridhin Varkey Joseph"
 SCHOOL = "Newton School of Technology · S-VYASA"
 # Repos left off the cards: class / club exercises, not real upstream work.
-SKIP = {"garv-sanveria/type-your-name-for-attendance-", "NST-DEVFORGE/workbook"}
+SKIP = {"garv-sanveria/type-your-name-for-attendance-", "NST-DEVFORGE/workbook", "NST-DEVFORGE/DevForge"}
 OUT = Path(__file__).resolve().parent.parent / "assets"
 
 MONO = "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace"
