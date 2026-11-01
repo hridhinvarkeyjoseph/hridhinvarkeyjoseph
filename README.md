@@ -17,9 +17,9 @@ regression tests in linkml, and database fixes in libredb-studio.
 Now contributing to Sugar Labs (sugar-ai) and OpenStreetMap.
 ```
 
-<img src="assets/wall.svg" alt="Every open-source project I have shipped code into, with how many pull requests are merged or in review" width="100%">
-
 <img src="assets/telemetry.svg" alt="What my pull requests changed: lines by language, lines per project, and the share of added lines that are tests" width="100%">
+
+<img src="assets/wall.svg" alt="Every open-source project I have shipped code into, with how many pull requests are merged or in review" width="100%">
 
 <img src="assets/timeline.svg" alt="A constellation of my pull requests: each project is a coloured constellation; every PR is a dot on the day it was opened linked to a star on the day it merged, twinkling rings are still in review and a red cross marks a closed PR" width="100%">
 
@@ -29,4 +29,4 @@ Now contributing to Sugar Labs (sugar-ai) and OpenStreetMap.
 <summary><sub>How this page works</sub></summary>
 
 <sub>Every card above is an SVG drawn by <code>scripts/generate.py</code> (Python standard library only) from GitHub's own API: my pull requests, the lines each one changed, and when each was merged. A workflow in this repo redraws them every six hours. No third-party stats service.</sub>
-</details> 
+</details>
