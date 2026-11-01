@@ -29,4 +29,4 @@ Now contributing to Sugar Labs (sugar-ai) and OpenStreetMap.
 <summary><sub>How this page works</sub></summary>
 
 <sub>Every card above is an SVG drawn by <code>scripts/generate.py</code> (Python standard library only) from GitHub's own API: my pull requests, the lines each one changed, and when each was merged. A workflow in this repo redraws them every six hours. No third-party stats service.</sub>
-</details>
+</details> 
