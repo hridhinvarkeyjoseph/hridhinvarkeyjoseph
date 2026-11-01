@@ -26,7 +26,8 @@ from pathlib import Path
 USER = os.environ.get("PROFILE_USER", "hridhinvarkeyjoseph")
 NAME = "Hridhin Varkey Joseph"
 SCHOOL = "Newton School of Technology · S-VYASA"
-GOAL = 10  # the DevForge "10 PR Journey"
+# Repos left off the cards: class / club exercises, not real upstream work.
+SKIP = {"garv-sanveria/type-your-name-for-attendance-", "NST-DEVFORGE/workbook"}
 OUT = Path(__file__).resolve().parent.parent / "assets"
 
 MONO = "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace"
@@ -60,6 +61,8 @@ def fetch():
     repos, pulls = {}, []
     for it in items:
         repo = it["repository_url"].split("/repos/")[1]
+        if repo in SKIP:
+            continue
         if repo not in repos:
             info = api("repos/" + repo)
             repos[repo] = {"stars": info["stargazers_count"], "language": info.get("language")}
@@ -72,6 +75,7 @@ def fetch():
             "status": "merged" if pr.get("merged_at") else pr["state"],
             "created": pr["created_at"],
             "merged": pr.get("merged_at"),
+            "closed": pr.get("closed_at"),
             "files": [[f["filename"], f["additions"], f["deletions"]] for f in files],
         })
     return {"repos": repos, "pulls": pulls, "now": None}
@@ -238,8 +242,8 @@ def hero(pulls, repos, now):
 
     # stat tiles, 2 x 2
     tiles = [
-        (f"{s['merged']}/{GOAL}", "10 PR Journey merged", STATUS["merged"]),
-        (str(s["n"]), f"PRs to {s['repos']} projects", ADD),
+        (f"{s['merged']}/{s['n']}", "PRs merged upstream", STATUS["merged"]),
+        (str(s["repos"]), "open-source projects", ADD),
         (f"+{s['adds']}", f"lines in · −{s['dels']} out", ADD),
         (f"{kstars(s['reach'])}★", "stars on what I touched", MINE),
     ]
@@ -251,8 +255,8 @@ def hero(pulls, repos, now):
                  f'<rect x="{x}" y="{y}" width="3" height="62" rx="1.5" fill="{color}"/>'
                  f'<text x="{x + 16}" y="{y + 30}" font-size="22" font-weight="700" fill="{TEXT}">{escape(big)}</text>'
                  f'<text x="{x + 16}" y="{y + 49}" font-size="11" fill="{MUTED}">{escape(small)}</text></g>')
-        if i == 0:  # journey progress inside the first tile
-            w = 150 * min(s["merged"], GOAL) / GOAL
+        if i == 0:  # merged share inside the first tile
+            w = 150 * s["merged"] / max(s["n"], 1)
             o.append(f'<rect x="{x + 16}" y="{y + 54}" width="150" height="3" rx="1.5" fill="{LINE}"/>'
                      f'<rect x="{x + 16}" y="{y + 54}" width="{w:.0f}" height="3" rx="1.5" fill="url(#bar)" class="grow" style="animation-delay:{d + .3:.2f}s"/>')
 
@@ -435,98 +439,117 @@ def telemetry(pulls, repos):
 
 # ================================================================ timeline
 
+SKY = ["#a78bfa", "#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#38bdf8",
+       "#f97316", "#facc15", "#c084fc", "#2dd4bf", "#fb7185", "#a3e635"]
+
+
+def star_shape(x, y, r, color):
+    pts = []
+    for k in range(10):
+        a = -math.pi / 2 + k * math.pi / 5
+        rr = r if k % 2 == 0 else r * .45
+        pts.append(f"{x + rr * math.cos(a):.1f},{y + rr * math.sin(a):.1f}")
+    return f'<polygon points="{" ".join(pts)}" fill="{color}"/>'
+
+
 def timeline(pulls, now):
-    W, X0, X1 = 900, 170, 860
-    by_repo = {}
+    """A night sky: each project is a constellation in its own colour. Every PR
+    is a faint dot on the day it was opened, linked to a star on the day it
+    merged. PRs in review twinkle at today; closed ones end in a red cross."""
+    W, H, X0, X1 = 900, 450, 170, 850
+    CLOSED = STATUS["closed"]
+    rng = random.Random(21)
+    repos = []
     for p in sorted(pulls, key=lambda p: p["created"]):
-        by_repo.setdefault(p["repo"], []).append(p)
+        if p["repo"] not in repos:
+            repos.append(p["repo"])
+    color = {r: SKY[i % len(SKY)] for i, r in enumerate(repos)}
+    t0 = min(ts(p["created"]) for p in pulls) - timedelta(days=1)
+    X = lambda t: X0 + (X1 - X0) * (t - t0).total_seconds() / max((now - t0).total_seconds(), 1)
 
-    # pack each repo's PRs into as few rows as possible
-    lanes = []
-    for repo, ps in by_repo.items():
-        rows = []
-        for p in ps:
-            start, end = ts(p["created"]), ts(p["merged"]) if p.get("merged") else now
-            for row in rows:
-                if row[-1][1] + timedelta(hours=6) < start:
-                    row.append((p, end))
-                    break
-            else:
-                rows.append([(p, end)])
-        lanes.append((repo, rows))
+    def outcome(p):
+        if p["status"] == "merged":
+            return ts(p["merged"])
+        if p["status"] == "closed":
+            return ts(p.get("closed") or p["created"])
+        return now
 
-    t0 = min(ts(p["created"]) for p in pulls).replace(hour=0, minute=0, second=0)
-    t1 = max(now, t0 + timedelta(days=1))
-    span_s = (t1 - t0).total_seconds()
-
-    def X(t):
-        return X0 + (X1 - X0) * (t - t0).total_seconds() / span_s
-
-    top, rowh = 92, 22
-    H = top + sum(len(r) * rowh + 14 for _, r in lanes) + 46
-
-    defs = GRID + f"""
-<pattern id="stripe" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-<rect width="8" height="8" fill="{STATUS['open']}" fill-opacity=".18"/><rect width="3" height="8" fill="{STATUS['open']}" fill-opacity=".55"/>
-<animateTransform attributeName="patternTransform" type="translate" from="0 0" to="8 0" dur="0.8s" additive="sum" repeatCount="indefinite"/></pattern>
+    defs = f"""
+<radialGradient id="neb" cx="62%" cy="45%" r="60%"><stop offset="0" stop-color="#1a1440" stop-opacity=".9"/><stop offset="1" stop-color="{BG}" stop-opacity="0"/></radialGradient>
+<filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3.2"/></filter>
 <style>{BASE_CSS}
-.grow{{transform-box:fill-box;transform-origin:left;transform:scaleX(0);animation:grow 1s cubic-bezier(.2,.8,.2,1) forwards}}
-@keyframes grow{{to{{transform:scaleX(1)}}}}
-.ping{{transform-box:fill-box;transform-origin:center;animation:ping 1.8s ease-out infinite}}
-@keyframes ping{{from{{opacity:.8;transform:scale(1)}}to{{opacity:0;transform:scale(3)}}}}
+.tw{{animation:tw 2.4s ease-in-out infinite}}
+@keyframes tw{{0%,100%{{opacity:1}}50%{{opacity:.25}}}}
+.bg{{animation:bgtw 4s ease-in-out infinite}}
+@keyframes bgtw{{0%,100%{{opacity:.15}}50%{{opacity:.5}}}}
 </style>"""
-    o = [frame(W, H, "git log --graph --since=journey-start")]
+    o = [f'<rect width="{W}" height="{H}" rx="14" fill="{BG}"/><rect width="{W}" height="{H}" rx="14" fill="url(#neb)"/>'
+         f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="14" fill="none" stroke="{LINE}"/>']
+    for i in range(90):
+        cls = ' class="bg" style="animation-delay:%.1fs"' % rng.uniform(0, 4) if i % 6 == 0 else f' opacity="{rng.uniform(.1, .45):.2f}"'
+        o.append(f'<circle cx="{rng.uniform(8, W - 8):.0f}" cy="{rng.uniform(8, H - 8):.0f}" r="{rng.choice([.4, .6, .8])}" fill="#fff"{cls}/>')
+    # date axis along the bottom, one label a week, like the other cards
+    ay = H - 22
+    d = t0.replace(hour=0, minute=0, second=0)
+    d += timedelta(days=(7 - d.weekday()) % 7)
+    while d < now - timedelta(days=3):
+        x = X(d)
+        o.append(f'<line x1="{x:.1f}" y1="52" x2="{x:.1f}" y2="{ay - 14}" stroke="#ffffff" stroke-opacity=".04" stroke-dasharray="2 5"/>'
+                 f'<text x="{x:.1f}" y="{ay}" font-size="9.5" text-anchor="middle" fill="{DIM}" class="mono">{d.strftime("%b %d")}</text>')
+        d += timedelta(days=7)
+    o.append(f'<text x="{X(now):.1f}" y="{ay}" font-size="9.5" text-anchor="end" fill="{MINE}" class="mono">today</text>')
 
-    # day grid
-    days = (t1 - t0).days + 1
-    every = max(1, math.ceil(days / 12))
-    for d in range(0, days + 1):
-        t = t0 + timedelta(days=d)
-        if t > t1:
-            break
-        x = X(t)
-        o.append(f'<line x1="{x:.1f}" y1="{top - 18}" x2="{x:.1f}" y2="{H - 40}" stroke="{LINE}" stroke-width="{1 if d % every == 0 else .4}"/>')
-        if d % every == 0:
-            o.append(f'<text x="{x:.1f}" y="{top - 24}" font-size="10" text-anchor="middle" fill="{DIM}" class="mono">{t.strftime("%b %d")}</text>')
+    bands = {r: 78 + i * (H - 140) / max(len(repos) - 1, 1) for i, r in enumerate(repos)}
+    pos = {}
+    for r in repos:
+        mine = sorted((p for p in pulls if p["repo"] == r), key=lambda p: p["created"])
+        for k, p in enumerate(mine):
+            yb = bands[r] + rng.uniform(-5, 5) + (k - (len(mine) - 1) / 2) * 7
+            ya = yb + rng.uniform(-9, 9)
+            xa = X(ts(p["created"]))
+            xb = X(now) - 6 if p["status"] == "open" else X(outcome(p))
+            pos[id(p)] = ((xa, ya), (max(xb, xa + 10), yb))
 
-    y = top
-    k = 0
-    for li, (repo, rows) in enumerate(lanes):
-        lane_h = len(rows) * rowh + 14
-        if li % 2 == 0:
-            o.append(f'<rect x="12" y="{y - 7}" width="{W - 24}" height="{lane_h}" rx="6" fill="{PANEL}" fill-opacity=".45"/>')
-        o.append(f'<text x="28" y="{y + 4 + (len(rows) - 1) * rowh / 2 + 6:.0f}" font-size="12" fill="{MINE}" class="mono">{escape(clip(short(repo), 16))}</text>')
-        for ri, row in enumerate(rows):
-            cy = y + ri * rowh + 10
-            for p, end in row:
-                xa, xb = X(ts(p["created"])), X(end)
-                w = max(xb - xa, 12)
-                merged = p["status"] == "merged"
-                fill = STATUS["merged"] if merged else "url(#stripe)"
-                stroke = STATUS["merged"] if merged else STATUS["open"]
-                o.append(f'<g class="mono"><rect x="{xa:.1f}" y="{cy - 7}" width="{w:.1f}" height="14" rx="7" fill="{fill}" '
-                         f'stroke="{stroke}" class="grow" style="animation-delay:{.15 + k * .08:.2f}s"/>'
-                         f'<circle cx="{xa:.1f}" cy="{cy}" r="3" fill="{TEXT}"/>')
-                if merged:
-                    o.append(f'<circle cx="{xa + w:.1f}" cy="{cy}" r="4.5" fill="{BG}" stroke="{STATUS["merged"]}" stroke-width="2"/>')
-                hours = ((ts(p["merged"]) if merged else now) - ts(p["created"])).total_seconds() / 3600
-                label = f'#{p["number"]} · {"merged in " if merged else "open "}{span(hours)}'
-                lx = xa + w + 9
-                anchor = "start"
-                if lx + len(label) * 6.2 > W - 14:
-                    lx, anchor = xa - 8, "end"
-                o.append(f'<text x="{lx:.1f}" y="{cy + 4}" font-size="10.5" text-anchor="{anchor}" fill="{MUTED}">{escape(label)}</text></g>')
-                k += 1
-        y += lane_h
+    for r in repos:
+        c = color[r]
+        mine = sorted((p for p in pulls if p["repo"] == r), key=lambda p: p["created"])
+        for p in mine:
+            (xa, ya), (xb, yb) = pos[id(p)]
+            dash = ' stroke-dasharray="2 4"' if p["status"] == "open" else ""
+            o.append(f'<line x1="{xa:.1f}" y1="{ya:.1f}" x2="{xb:.1f}" y2="{yb:.1f}" stroke="{c}" '
+                     f'stroke-opacity="{.22 if p["status"] == "open" else .4}"{dash}/>'
+                     f'<circle cx="{xa:.1f}" cy="{ya:.1f}" r="1.8" fill="{c}" opacity=".8"/>')
+        stars = [pos[id(p)][1] for p in mine if p["status"] == "merged"]
+        for (xa, ya), (xb, yb) in zip(stars, stars[1:]):
+            o.append(f'<line x1="{xa:.1f}" y1="{ya:.1f}" x2="{xb:.1f}" y2="{yb:.1f}" stroke="{c}" stroke-opacity=".3"/>')
+        (fx, fy), _ = pos[id(mine[0])]
+        o.append(f'<text x="{fx - 10:.1f}" y="{fy + 3.5:.1f}" font-size="9.5" letter-spacing="1" text-anchor="end" '
+                 f'fill="{c}" opacity=".85" class="mono">{escape(short(r).upper())}</text>')
 
-    nx = X(now)
-    o.append(f'<line x1="{nx:.1f}" y1="{top - 14}" x2="{nx:.1f}" y2="{H - 40}" stroke="{MINE}" stroke-dasharray="3 3"/>'
-             f'<circle cx="{nx:.1f}" cy="{top - 14}" r="4" fill="{MINE}" class="ping"/><circle cx="{nx:.1f}" cy="{top - 14}" r="4" fill="{MINE}"/>')
-    o.append(f'<text x="{nx - 8:.1f}" y="{top - 24}" font-size="10" text-anchor="end" fill="{MINE}" class="mono" font-weight="700">now</text>')
-    o.append(f'<g class="mono" font-size="10.5" fill="{MUTED}">'
-             f'<rect x="28" y="{H - 27}" width="22" height="10" rx="5" fill="{STATUS["merged"]}"/><text x="58" y="{H - 18}">opened → merged</text>'
-             f'<rect x="190" y="{H - 27}" width="22" height="10" rx="5" fill="url(#stripe)" stroke="{STATUS["open"]}"/><text x="220" y="{H - 18}">still in review</text></g>')
-    return svg(W, H, "".join(o), "Timeline of my upstream pull requests", defs)
+    for i, p in enumerate(sorted(pulls, key=lambda p: p["created"])):
+        _, (x, y) = pos[id(p)]
+        c = color[p["repo"]]
+        if p["status"] == "merged":
+            days = (ts(p["merged"]) - ts(p["created"])).total_seconds() / 86400
+            r = 4 + min(days, 8) * .55
+            o.append(f'<g class="in" style="animation-delay:{.2 + .08 * i:.2f}s">'
+                     f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r + 4:.1f}" fill="{c}" opacity=".55" filter="url(#glow)"/>'
+                     + star_shape(x, y, r + 1.5, c) + f'<circle cx="{x:.1f}" cy="{y:.1f}" r="1.4" fill="#fff"/></g>')
+        elif p["status"] == "open":
+            o.append(f'<g class="tw" style="animation-delay:{.3 * i:.1f}s"><circle cx="{x:.1f}" cy="{y:.1f}" r="7" fill="{c}" opacity=".35" filter="url(#glow)"/>'
+                     f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4.5" fill="none" stroke="{c}" stroke-width="1.5"/></g>')
+        else:
+            o.append(f'<text x="{x:.1f}" y="{y + 4.5:.1f}" font-size="13" font-weight="700" text-anchor="middle" fill="{CLOSED}" class="mono">✕</text>')
+
+    merged = sum(p["status"] == "merged" for p in pulls)
+    review = sum(p["status"] == "open" for p in pulls)
+    closed = sum(p["status"] == "closed" for p in pulls)
+    o.append(f'<text x="36" y="30" font-size="10.5" fill="#6b7899" class="mono">{len(pulls)} pull requests · {merged} merged · {review} in review · {closed} closed</text>')
+    o.append(f'<g class="mono" font-size="10.5" fill="#6b7899">' + star_shape(W - 268, 26, 5, "#cbd5e1")
+             + f'<text x="{W - 258}" y="30">merged</text>'
+             f'<circle cx="{W - 192}" cy="26" r="4" fill="none" stroke="#cbd5e1" stroke-width="1.5"/><text x="{W - 184}" y="30">in review</text>'
+             f'<text x="{W - 102}" y="31" fill="{CLOSED}" font-weight="700">✕</text><text x="{W - 89}" y="30">closed</text></g>')
+    return svg(W, H, "".join(o), f"Constellation of {len(pulls)} pull requests across {len(repos)} projects: {merged} merged, {review} in review, {closed} closed", defs)
 
 
 # ================================================================ log
@@ -575,10 +598,60 @@ def log(pulls, now):
     return svg(W, H, "".join(o), f"{len(pulls)} upstream pull requests", defs)
 
 
+# ================================================================ wall
+
+def wall(pulls, repos):
+    """Every project I have shipped code into, as badges: merged and in review."""
+    W, CW, PAD, GAP, H_CHIP = 900, 7.6, 12, 12, 30
+    counts = {}
+    for p in pulls:
+        c = counts.setdefault(p["repo"], {"merged": 0, "open": 0})
+        if p["status"] in c:
+            c[p["status"]] += 1
+    order = sorted((r for r in counts if counts[r]["merged"] or counts[r]["open"]),
+                   key=lambda r: (-counts[r]["merged"], -counts[r]["open"], -repos.get(r, {}).get("stars", 0)))
+    chips, x, y = [], 36, 96
+    for i, repo in enumerate(order):
+        name, c = short(repo), counts[repo]
+        segs = [(f"✔ {c['merged']}", STATUS["merged"])] if c["merged"] else []
+        if c["open"]:
+            segs.append((f"◷ {c['open']}", STATUS["open"]))
+        wn = len(name) * CW + 2 * PAD
+        ws = [len(t) * CW + 2 * PAD for t, _ in segs]
+        w = wn + sum(ws)
+        if x + w > W - 36:
+            x, y = 36, y + H_CHIP + GAP
+        g = [f'<g class="mono in" font-size="12.5" style="animation-delay:{.15 + .07 * i:.2f}s">',
+             f'<clipPath id="chip{i}"><rect x="{x}" y="{y}" width="{w:.0f}" height="{H_CHIP}" rx="7"/></clipPath>',
+             f'<rect x="{x}" y="{y}" width="{w:.0f}" height="{H_CHIP}" rx="7" fill="{PANEL}"/>',
+             f'<text x="{x + PAD}" y="{y + 19.5}" fill="{TEXT}">{escape(name)}</text>']
+        sx = x + wn
+        g.append(f'<g clip-path="url(#chip{i})">')
+        for (t, color), sw in zip(segs, ws):
+            g.append(f'<rect x="{sx:.0f}" y="{y}" width="{sw:.0f}" height="{H_CHIP}" fill="{color}"/>')
+            g.append(f'<text x="{sx + PAD:.0f}" y="{y + 19.5}" font-weight="700" fill="#0b0f19">{t}</text>')
+            sx += sw
+        g.append("</g>")
+        g.append(f'<rect x="{x}" y="{y}" width="{w:.0f}" height="{H_CHIP}" rx="7" fill="none" stroke="{LINE}"/></g>')
+        chips.append("".join(g))
+        x += w + GAP
+    H = y + H_CHIP + 54
+    defs = GRID + f"<style>{BASE_CSS}</style>"
+    o = [frame(W, H, "git remote -v | upstream"),
+         f'<text x="36" y="76" font-size="13" fill="{MUTED}" class="mono">code I have shipped into</text>']
+    o += chips
+    o.append(f'<g class="mono" font-size="11" fill="{MUTED}">'
+             f'<circle cx="40" cy="{H - 24}" r="4" fill="{STATUS["merged"]}"/><text x="50" y="{H - 20}">merged</text>'
+             f'<circle cx="116" cy="{H - 24}" r="4" fill="{STATUS["open"]}"/><text x="126" y="{H - 20}">in review</text></g>')
+    total = sum(c["merged"] for c in counts.values())
+    return svg(W, H, "".join(o), f"Code shipped into {len(order)} open-source projects, {total} pull requests merged", defs)
+
+
 def main():
     pulls, repos, now = load()
     OUT.mkdir(exist_ok=True)
     (OUT / "hero.svg").write_text(hero(pulls, repos, now))
+    (OUT / "wall.svg").write_text(wall(pulls, repos))
     (OUT / "telemetry.svg").write_text(telemetry(pulls, repos))
     (OUT / "timeline.svg").write_text(timeline(pulls, now))
     (OUT / "pulls.svg").write_text(log(pulls, now))
