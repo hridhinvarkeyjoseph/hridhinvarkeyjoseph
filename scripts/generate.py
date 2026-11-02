@@ -277,48 +277,47 @@ def hero(pulls, repos, now):
     def geometry(i, r, a):
         rad = RADII[i % len(RADII)] + (i // len(RADII)) * 10
         x, y = cx + rad * math.cos(a), cy + rad * T * math.sin(a)
-        depth = math.sin(a)
-        pr = (5 + 1.9 * math.log10(repos.get(r, {}).get("stars", 0) + 1)) * (0.82 + 0.18 * (depth + 1) / 2)
+        pr = 5 + 1.9 * math.log10(repos.get(r, {}).get("stars", 0) + 1)
         parts = label_parts(r)
         wlen = sum(len(t) + (1 if j else 0) for j, (t, _) in enumerate(parts)) * 6.1 + 14
-        out = 1 if x >= cx else -1
-        if out < 0 and x - pr - 16 - wlen < LEFT_EDGE:
-            out = 1
-        lx = x + out * (pr + 16)
-        ly = y + (pr * .2 if depth >= 0 else -pr * .2)
-        rx = lx if out > 0 else lx - wlen
-        return dict(x=x, y=y, depth=depth, pr=pr, out=out, lx=lx, ly=ly, rx=rx, wlen=wlen, parts=parts)
+        return dict(a=a, rad=rad, x=x, y=y, pr=pr, wlen=wlen, parts=parts)
 
     def boxes(g):
-        return [(g["x"] - g["pr"] - 10, g["y"] - g["pr"] - 6, g["x"] + g["pr"] + 10, g["y"] + g["pr"] + 6),
-                (g["rx"] - 2, g["ly"] - 11, g["rx"] + g["wlen"] + 2, g["ly"] + 10)]
+        return [(g["x"] - g["pr"] - 10, g["y"] - g["pr"] - 8, g["x"] + g["pr"] + 10, g["y"] + g["pr"] + 6),
+                (g["x"] - g["wlen"] / 2, g["y"] + g["pr"] + 7, g["x"] + g["wlen"] / 2, g["y"] + g["pr"] + 25)]
 
     def overlap(a, b):
         return max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(0, min(a[3], b[3]) - max(a[1], b[1]))
 
-    sun_box = (cx - 40, cy - 40, cx + 40, cy + 40)
+    sun_box = (cx - 48, cy - 44, cx + 48, cy + 44)
     placed, taken = [], []
     for i, r in enumerate(order):
         best = None
         for step in range(48):
-            a = step * 2 * math.pi / 48 + i * .37
-            g = geometry(i, r, a)
+            g = geometry(i, r, step * 2 * math.pi / 48 + i * .37)
             bx_ = boxes(g)
-            cost = sum(overlap(b, t) for b in bx_ for t in taken) * 4
-            cost += sum(overlap(b, sun_box) for b in bx_) * 2
-            cost += max(0, (g["rx"] + g["wlen"]) - (W - 8)) * 40 + max(0, LEFT_EDGE - g["rx"]) * 40
-            cost += max(0, 60 - g["ly"]) * 40 + max(0, g["ly"] - (H - 40)) * 40
+            cost = sum(overlap(b, t) for b in bx_ for t in taken) * 4 + sum(overlap(b, sun_box) for b in bx_) * 8
+            cost += max(0, LEFT_EDGE - bx_[1][0]) * 40 + max(0, bx_[1][2] - (W - 8)) * 40
             if best is None or cost < best[0]:
                 best = (cost, g)
-        g = best[1]
-        placed.append((i, r, g))
-        taken += boxes(g)
+        placed.append((i, r, best[1]))
+        taken += boxes(best[1])
 
     def draw(i, r, g):
-        st, c = stats[r], colour[r]
-        x, y, pr = g["x"], g["y"], g["pr"]
-        out = [f'<g class="in" style="animation-delay:{.3 + .08 * i:.2f}s" opacity="{1 if g["depth"] >= 0 else .8}">'
-               f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{pr * 1.9:.1f}" fill="{c}" opacity=".22" filter="url(#soft)"/>']
+        """A planet that orbits its ring, with its moons and name tag riding along."""
+        st, c, pr = stats[r], colour[r], g["pr"]
+        a0, rad = g["a"], g["rad"]
+        x0, y0 = g["x"], g["y"]
+        x1, y1 = 2 * cx - x0, 2 * cy - y0
+        path = f"M{x0:.1f},{y0:.1f} A{rad},{rad * T:.1f} 0 1,1 {x1:.1f},{y1:.1f} A{rad},{rad * T:.1f} 0 1,1 {x0:.1f},{y0:.1f}"
+        dur = 120  # same period for every ring: the whole system turns together, so tags stay apart
+        # nearer the viewer (lower on screen) = brighter; farther = dimmer
+        shade = ";".join(f"{.55 + .45 * (math.sin(a0 + 2 * math.pi * k / 12) + 1) / 2:.2f}" for k in range(13))
+        out = [f'<g><animateMotion dur="{dur:.0f}s" repeatCount="indefinite" path="{path}"/>'
+               f'<animate attributeName="opacity" dur="{dur:.0f}s" repeatCount="indefinite" values="{shade}"/>'
+               f'<g transform="translate({-x0:.1f},{-y0:.1f})"><g class="in" style="animation-delay:{.3 + .08 * i:.2f}s">']
+        x, y = x0, y0
+        out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{pr * 1.9:.1f}" fill="{c}" opacity=".22" filter="url(#soft)"/>')
         ringed = i == 0 or st["merged"] + st["open"] + st["closed"] >= 4
         if ringed:
             out.append(f'<path d="M{x - pr * 2.1:.1f},{y:.1f} A{pr * 2.1:.1f},{pr * .6:.1f} 0 0 1 {x + pr * 2.1:.1f},{y:.1f}" fill="none" stroke="#d6c4ff" stroke-opacity=".55" stroke-width="2"/>')
@@ -329,24 +328,30 @@ def hero(pulls, repos, now):
         moons = [STATUS["merged"]] * st["merged"] + [STATUS["open"]] * st["open"] + [CLOSED] * st["closed"]
         mr = pr + 7
         out.append(f'<ellipse cx="{x:.1f}" cy="{y:.1f}" rx="{mr:.1f}" ry="{mr * .45:.1f}" fill="none" stroke="#fff" stroke-opacity=".10"/>')
+        # moons circle their planet
+        out.append(f'<g><animateTransform attributeName="transform" type="rotate" from="0 {x:.1f} {y:.1f}" to="360 {x:.1f} {y:.1f}" dur="{14 + i:.0f}s" repeatCount="indefinite"/>')
         for k, col in enumerate(moons):
-            a = math.pi * 1.15 + k * (2 * math.pi / max(len(moons), 1))
-            out.append(f'<circle cx="{x + mr * math.cos(a):.1f}" cy="{y + mr * .45 * math.sin(a):.1f}" r="3.1" fill="{col}" stroke="#05060f" stroke-width="1.2"/>')
+            ang = math.pi * 1.15 + k * (2 * math.pi / max(len(moons), 1))
+            out.append(f'<circle cx="{x + mr * math.cos(ang):.1f}" cy="{y + mr * math.sin(ang):.1f}" r="3.1" fill="{col}" stroke="#05060f" stroke-width="1.2"/>')
+        out.append('</g>')
         txt = "".join(f'<tspan fill="{col}">{" " if j else ""}{escape(t)}</tspan>' for j, (t, col) in enumerate(g["parts"]))
-        out.append(f'<line x1="{x + g["out"] * pr * .9:.1f}" y1="{y:.1f}" x2="{g["lx"]:.1f}" y2="{g["ly"]:.1f}" stroke="{c}" stroke-opacity=".5"/>'
-                   f'<rect x="{g["rx"]:.1f}" y="{g["ly"] - 9:.1f}" width="{g["wlen"]:.1f}" height="17" rx="8.5" fill="#0b1020" fill-opacity=".85" stroke="{c}" stroke-opacity=".45"/>'
-                   f'<text x="{g["rx"] + 7:.1f}" y="{g["ly"] + 3.5:.1f}" font-size="10" class="mono">{txt}</text></g>')
+        ty = y + pr + 16
+        # the tag fades out while the planet is on the far side of the sun, where the rings crowd together
+        steps = 24
+        fade = ";".join("1" if math.sin(a0 + 2 * math.pi * k / steps) > -.35 else "0" for k in range(steps + 1))
+        out.append(f'<g><animate attributeName="opacity" dur="{dur:.0f}s" repeatCount="indefinite" calcMode="linear" values="{fade}"/>'
+                   f'<rect x="{x - g["wlen"] / 2:.1f}" y="{ty - 9:.1f}" width="{g["wlen"]:.1f}" height="17" rx="8.5" fill="#0b1020" fill-opacity=".85" stroke="{c}" stroke-opacity=".45"/>'
+                   f'<text x="{x:.1f}" y="{ty + 3.5:.1f}" font-size="10" text-anchor="middle" class="mono">{txt}</text></g></g></g></g>')
         return "".join(out)
 
     for rad in RADII:
         o.append(f'<path d="M{cx - rad},{cy} A{rad},{rad * T:.1f} 0 0 1 {cx + rad},{cy}" fill="none" stroke="url(#orbBack)" stroke-width="1.2"/>')
-    o += [draw(i, r, g) for i, r, g in sorted(placed, key=lambda t: t[2]["depth"]) if g["depth"] < 0]
     o.append(f'<circle cx="{cx}" cy="{cy}" r="78" fill="url(#corona)"><animate attributeName="r" values="74;84;74" dur="5s" repeatCount="indefinite"/></circle>'
              f'<circle cx="{cx}" cy="{cy}" r="31" fill="url(#sun)"/>'
              f'<text x="{cx}" y="{cy + 5}" font-size="13.5" font-weight="800" text-anchor="middle" fill="#3b1d04" class="mono">HVJ</text>')
     for rad in RADII:
         o.append(f'<path d="M{cx - rad},{cy} A{rad},{rad * T:.1f} 0 0 0 {cx + rad},{cy}" fill="none" stroke="url(#orbFront)" stroke-width="1.3"/>')
-    o += [draw(i, r, g) for i, r, g in sorted(placed, key=lambda t: t[2]["depth"]) if g["depth"] >= 0]
+    o += [draw(i, r, g) for i, r, g in placed]
     o.append(f'<g class="mono" font-size="10.5" fill="{MUTED}"><text x="{W - 400}" y="{H - 18}">each moon is a PR:</text>'
              f'<circle cx="{W - 262}" cy="{H - 22}" r="4" fill="{STATUS["merged"]}"/><text x="{W - 253}" y="{H - 18}">merged</text>'
              f'<circle cx="{W - 188}" cy="{H - 22}" r="4" fill="{STATUS["open"]}"/><text x="{W - 179}" y="{H - 18}">in review</text>'
