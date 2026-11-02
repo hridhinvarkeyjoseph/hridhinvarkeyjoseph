@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Draw the profile's cards from GitHub's own data.
 
-assets/hero.svg       an orbit of every project I have sent a pull request to,
-                      a typed-out intro, live stats and a ticker of my PRs.
+assets/hero.svg       a tilted 3D solar system: every project is a planet,
+                      every PR a moon, plus my name and live stats.
 assets/telemetry.svg  what my PRs changed: lines by language, per project,
                       and how much of it is tests.
-assets/timeline.svg   every PR as a capsule from opened to merged (or now).
+assets/timeline.svg   a constellation of every PR, opened to merged (or now).
 assets/pulls.svg      the log: each PR, its status, size and time to merge.
 
 Standard library only. In GitHub Actions it reads GITHUB_TOKEN; locally,
@@ -41,6 +41,8 @@ LANG_COLOR = {
     "Markdown": "#9aa7c0", "JSON": "#ff8a3d", "Config": "#2dd4bf",
     "YAML": "#f472b6", "Python": "#60a5fa", "Other": "#64748b",
 }
+SKY = ["#a78bfa", "#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#38bdf8",
+       "#f97316", "#facc15", "#c084fc", "#2dd4bf", "#fb7185", "#a3e635"]
 
 
 # ================================================================ data
@@ -182,161 +184,174 @@ def summary(pulls, repos):
 
 # ================================================================ hero
 
-def typed(x, y, text, start, size, fill, weight="400", per=0.045):
-    """Text that types itself out, one character at a time."""
-    out = [f'<text x="{x}" y="{y}" font-size="{size}" font-weight="{weight}" fill="{fill}" class="mono">']
-    for i, ch in enumerate(text):
-        out.append(f'<tspan class="ch" style="animation-delay:{start + i * per:.3f}s">{escape(ch)}</tspan>')
-    out.append("</text>")
-    return "".join(out), start + len(text) * per
-
-
 def hero(pulls, repos, now):
-    W, H = 900, 420
+    """Tilted 3D solar system: I am the sun, every project is a planet sized by
+    its stars, and each PR is a moon coloured by what happened to it."""
+    W, H = 900, 460
+    cx, cy, T = 622, 248, .36
+    RADII = [78, 112, 146, 180, 214, 248]
+    LEFT_EDGE = 365
     s = summary(pulls, repos)
-    rng = random.Random(7)
+    rng = random.Random(11)
+    CLOSED = STATUS["closed"]
 
-    defs = GRID + f"""
-<radialGradient id="glow" cx="72%" cy="42%" r="45%"><stop offset="0" stop-color="#1b2a55" stop-opacity=".9"/><stop offset="1" stop-color="{BG}" stop-opacity="0"/></radialGradient>
-<radialGradient id="core" cx="40%" cy="35%"><stop offset="0" stop-color="#ffe2a8"/><stop offset=".45" stop-color="{MINE}"/><stop offset="1" stop-color="#b45309"/></radialGradient>
-<radialGradient id="halo"><stop offset="0" stop-color="{MINE}" stop-opacity=".55"/><stop offset="1" stop-color="{MINE}" stop-opacity="0"/></radialGradient>
-<linearGradient id="bar" x1="0" x2="1"><stop offset="0" stop-color="{STATUS['merged']}"/><stop offset="1" stop-color="#e879f9"/></linearGradient>
-<linearGradient id="edge" x1="0" x2="1"><stop offset="0" stop-color="{BG}"/><stop offset=".06" stop-color="{BG}" stop-opacity="0"/><stop offset=".94" stop-color="{BG}" stop-opacity="0"/><stop offset="1" stop-color="{BG}"/></linearGradient>
-<clipPath id="tick"><rect x="1" y="{H - 44}" width="{W - 2}" height="43"/></clipPath>
-<style>{BASE_CSS}
-.ch{{opacity:0;animation:show .01s linear forwards}}
-@keyframes show{{to{{opacity:1}}}}
-.cursor{{animation:blink 1s steps(1) infinite}}
-@keyframes blink{{50%{{opacity:0}}}}
-.tw{{animation:tw 3s ease-in-out infinite}}
-@keyframes tw{{0%,100%{{opacity:.15}}50%{{opacity:.9}}}}
-.spin{{transform-box:fill-box;transform-origin:center;animation:spin 14s linear infinite}}
-.spin.r{{animation-duration:22s;animation-direction:reverse}}
-@keyframes spin{{to{{transform:rotate(360deg)}}}}
-.grow{{transform-box:fill-box;transform-origin:left;transform:scaleX(0);animation:grow 1.6s cubic-bezier(.2,.8,.2,1) forwards}}
-@keyframes grow{{to{{transform:scaleX(1)}}}}
-.ticker{{animation:roll var(--d) linear infinite}}
-@keyframes roll{{to{{transform:translateX(var(--l))}}}}
-</style>"""
-
-    o = [frame(W, H, f"~/{USER} — zsh — upstream"),
-         f'<rect x="1" y="43" width="{W - 2}" height="{H - 88}" fill="url(#glow)"/>']
-
-    # starfield
-    for _ in range(70):
-        x, y = rng.uniform(440, W - 10), rng.uniform(50, H - 52)
-        o.append(f'<circle cx="{x:.0f}" cy="{y:.0f}" r="{rng.choice([.6, .8, 1, 1.3]):.1f}" fill="#c7d2fe" '
-                 f'class="tw" style="animation-delay:{rng.uniform(0, 3):.2f}s"/>')
-
-    # ---- left: the typed intro
-    t, at = typed(36, 78, "~ $ whoami", .3, 13, MUTED)
-    o.append(t)
-    t, at = typed(36, 116, NAME, at + .25, 28, TEXT, "700", .05)
-    o.append(t)
-    o.append(f'<text x="{36 + len(NAME) * 16.9:.0f}" y="116" font-size="28" fill="{MINE}" class="mono cursor">▋</text>')
-    o.append(f'<g class="mono in" style="animation-delay:{at + .1:.2f}s">'
-             f'<text x="36" y="142" font-size="13" fill="{MINE}">CS student · {escape(SCHOOL)}</text>'
-             f'<text x="36" y="163" font-size="12.5" fill="{MUTED}">I read big codebases and send fixes upstream.</text></g>')
-    t, at2 = typed(36, 198, "~ $ git log --upstream --stat", at + .5, 13, MUTED, per=.03)
-    o.append(t)
-
-    # stat tiles, 2 x 2
-    tiles = [
-        (f"{s['merged']}/{s['n']}", "PRs merged upstream", STATUS["merged"]),
-        (str(s["repos"]), "open-source projects", ADD),
-        (f"+{s['adds']}", f"lines in · −{s['dels']} out", ADD),
-        (f"{kstars(s['reach'])}★", "stars on what I touched", MINE),
-    ]
-    for i, (big, small, color) in enumerate(tiles):
-        x, y = 36 + (i % 2) * 196, 214 + (i // 2) * 74
-        d = at2 + .1 + i * .12
-        o.append(f'<g class="mono in" style="animation-delay:{d:.2f}s">'
-                 f'<rect x="{x}" y="{y}" width="184" height="62" rx="10" fill="{PANEL}" fill-opacity=".85" stroke="{LINE}"/>'
-                 f'<rect x="{x}" y="{y}" width="3" height="62" rx="1.5" fill="{color}"/>'
-                 f'<text x="{x + 16}" y="{y + 30}" font-size="22" font-weight="700" fill="{TEXT}">{escape(big)}</text>'
-                 f'<text x="{x + 16}" y="{y + 49}" font-size="11" fill="{MUTED}">{escape(small)}</text></g>')
-        if i == 0:  # merged share inside the first tile
-            w = 150 * s["merged"] / max(s["n"], 1)
-            o.append(f'<rect x="{x + 16}" y="{y + 54}" width="150" height="3" rx="1.5" fill="{LINE}"/>'
-                     f'<rect x="{x + 16}" y="{y + 54}" width="{w:.0f}" height="3" rx="1.5" fill="url(#bar)" class="grow" style="animation-delay:{d + .3:.2f}s"/>')
-
-    # ---- right: the orbit
-    cx, cy = 690, 192
     stats = {}
     for p in pulls:
-        r = stats.setdefault(p["repo"], {"n": 0, "merged": 0})
-        r["n"] += 1
-        r["merged"] += p["status"] == "merged"
-    order = sorted(stats, key=lambda r: -repos.get(r, {}).get("stars", 0))[:8]
-    rings = [(78, 20), (126, 32), (172, 46)]
-    for rx, _ in rings:
-        ry = rx * .40
-        o.append(f'<ellipse cx="{cx}" cy="{cy}" rx="{rx}" ry="{ry:.1f}" fill="none" stroke="{LINE}" stroke-width="1.2" stroke-dasharray="2 5"/>')
+        st = stats.setdefault(p["repo"], {"merged": 0, "open": 0, "closed": 0})
+        if p["status"] in st:
+            st[p["status"]] += 1
+    order = sorted(stats, key=lambda r: -repos.get(r, {}).get("stars", 0))[:12]
+    colour = {r: SKY[i % len(SKY)] for i, r in enumerate(order)}
+    m_all = sum(v["merged"] for v in stats.values())
+    o_all = sum(v["open"] for v in stats.values())
+    c_all = sum(v["closed"] for v in stats.values())
 
-    # the core: me
-    o.append(f'<circle cx="{cx}" cy="{cy}" r="46" fill="url(#halo)"/>')
-    for k in range(3):
-        o.append(f'<circle cx="{cx}" cy="{cy}" r="20" fill="none" stroke="{MINE}" stroke-width="1.2">'
-                 f'<animate attributeName="r" from="22" to="70" dur="3.6s" begin="{k * 1.2}s" repeatCount="indefinite"/>'
-                 f'<animate attributeName="opacity" from=".7" to="0" dur="3.6s" begin="{k * 1.2}s" repeatCount="indefinite"/></circle>')
-    o.append(f'<circle cx="{cx}" cy="{cy}" r="30" fill="none" stroke="{MINE}" stroke-width="1" stroke-dasharray="3 6" class="spin"/>'
-             f'<circle cx="{cx}" cy="{cy}" r="36" fill="none" stroke="{MINE}" stroke-opacity=".4" stroke-width="1" stroke-dasharray="14 10" class="spin r"/>'
-             f'<circle cx="{cx}" cy="{cy}" r="22" fill="url(#core)"/>'
-             f'<text x="{cx}" y="{cy + 5}" font-size="13" font-weight="800" text-anchor="middle" fill="#1a1205" class="mono">HVJ</text>')
+    defs = [f"""
+<radialGradient id="neb" cx="68%" cy="52%" r="55%"><stop offset="0" stop-color="#22184f" stop-opacity=".95"/><stop offset=".6" stop-color="#0d0f2a" stop-opacity=".6"/><stop offset="1" stop-color="{BG}" stop-opacity="0"/></radialGradient>
+<radialGradient id="sun" cx="38%" cy="32%"><stop offset="0" stop-color="#fffbea"/><stop offset=".35" stop-color="#fcd34d"/><stop offset=".75" stop-color="{MINE}"/><stop offset="1" stop-color="#9a3412"/></radialGradient>
+<radialGradient id="corona"><stop offset=".35" stop-color="{MINE}" stop-opacity=".55"/><stop offset=".6" stop-color="#f97316" stop-opacity=".18"/><stop offset="1" stop-color="#f97316" stop-opacity="0"/></radialGradient>
+<linearGradient id="orbBack" x1="0" x2="1"><stop offset="0" stop-color="#2a3352" stop-opacity=".15"/><stop offset=".5" stop-color="#2a3352" stop-opacity=".55"/><stop offset="1" stop-color="#2a3352" stop-opacity=".15"/></linearGradient>
+<linearGradient id="orbFront" x1="0" x2="1"><stop offset="0" stop-color="#3b4a72" stop-opacity=".25"/><stop offset=".5" stop-color="#5a6aa0" stop-opacity=".9"/><stop offset="1" stop-color="#3b4a72" stop-opacity=".25"/></linearGradient>
+<filter id="soft" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="4"/></filter>
+<style>{BASE_CSS}
+.tw{{animation:tw 3s ease-in-out infinite}}
+@keyframes tw{{0%,100%{{opacity:.2}}50%{{opacity:.9}}}}
+</style>"""]
+    for i, r in enumerate(order):
+        c = colour[r]
+        defs.append(f'<radialGradient id="pl{i}" cx="32%" cy="28%" r="75%"><stop offset="0" stop-color="#fff" stop-opacity=".95"/>'
+                    f'<stop offset=".25" stop-color="{c}"/><stop offset=".8" stop-color="{c}" stop-opacity=".55"/><stop offset="1" stop-color="#03040a"/></radialGradient>')
 
-    for i, repo in enumerate(order):
-        rx, dur = rings[2 - i % 3]
-        ry = rx * .40
-        phase = (i // 3) * .5 + (i % 3) * .29
-        info, st = repos.get(repo, {"stars": 0}), stats[repo]
-        color = STATUS["merged"] if st["merged"] == st["n"] else STATUS["open"]
-        r = 5 + 2.1 * math.log10(info["stars"] + 1)
-        path = f"M{cx - rx},{cy} a{rx},{ry:.1f} 0 1,0 {2 * rx},0 a{rx},{ry:.1f} 0 1,0 {-2 * rx},0"
-        part = ""
-        if 0 < st["merged"] < st["n"]:  # some merged, some in review: a split ring
-            frac = st["merged"] / st["n"]
-            c = 2 * math.pi * (r + 3)
-            part = (f'<circle r="{r + 3:.1f}" fill="none" stroke="{STATUS["open"]}" stroke-width="2"/>'
-                    f'<circle r="{r + 3:.1f}" fill="none" stroke="{STATUS["merged"]}" stroke-width="2" '
-                    f'stroke-dasharray="{c * frac:.1f} {c:.1f}" transform="rotate(-90)"/>')
-        o.append(
-            f'<g><animateMotion dur="{dur}s" begin="-{phase * dur:.2f}s" repeatCount="indefinite" path="{path}"/>'
-            f'<circle r="{r + 7:.1f}" fill="{color}" opacity=".16"/>{part}'
-            f'<circle r="{r:.1f}" fill="{BG2}" stroke="{color}" stroke-width="2"/>'
-            f'<text y="4" font-size="10" font-weight="700" text-anchor="middle" fill="{color}" class="mono">{st["n"]}</text>'
-            f'<text y="{-r - 9:.0f}" font-size="10.5" font-weight="700" text-anchor="middle" fill="{TEXT}" class="mono">{escape(clip(short(repo), 15))}</text>'
-            f'<text y="{r + 15:.0f}" font-size="9.5" text-anchor="middle" fill="{MUTED}" class="mono">{kstars(info["stars"])}★</text></g>'
-        )
+    o = [f'<rect width="{W}" height="{H}" rx="14" fill="{BG}"/><rect x="300" y="43" width="{W - 301}" height="{H - 44}" fill="url(#neb)"/>',
+         f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="14" fill="none" stroke="{LINE}"/>',
+         f'<g class="mono"><circle cx="24" cy="22" r="5" fill="#ff5f57"/><circle cx="41" cy="22" r="5" fill="#febc2e"/><circle cx="58" cy="22" r="5" fill="#28c840"/>'
+         f'<text x="{W / 2}" y="26" font-size="11.5" text-anchor="middle" fill="{MUTED}">~/{USER} — orbit.3d</text></g>'
+         f'<line x1="0" y1="42" x2="{W}" y2="42" stroke="{LINE}"/>']
+    for i in range(160):
+        extra = f' class="tw" style="animation-delay:{rng.uniform(0, 3):.1f}s"' if i % 7 == 0 else f' opacity="{rng.uniform(.12, .7):.2f}"'
+        o.append(f'<circle cx="{rng.uniform(330, W - 8):.0f}" cy="{rng.uniform(50, H - 8):.0f}" r="{rng.choice([.4, .6, .8, 1.1])}" fill="#dbe4ff"{extra}/>')
 
-    o.append(f'<g class="mono" font-size="10.5" fill="{MUTED}">'
-             f'<circle cx="{W - 236}" cy="{H - 62}" r="4" fill="{STATUS["merged"]}"/><text x="{W - 228}" y="{H - 58}">merged</text>'
-             f'<circle cx="{W - 170}" cy="{H - 62}" r="4" fill="{STATUS["open"]}"/><text x="{W - 162}" y="{H - 58}">in review</text>'
-             f'<text x="{W - 92}" y="{H - 58}">n = PRs</text></g>')
+    # ---- left: name, PR breakdown, stat tiles
+    o.append(f'<g class="mono in" style="animation-delay:.1s"><text x="36" y="86" font-size="12.5" fill="{MUTED}">~ $ whoami</text>'
+             f'<text x="36" y="124" font-size="31" font-weight="800" fill="{TEXT}">{escape(NAME.split(" ", 1)[0])}</text>'
+             f'<text x="36" y="160" font-size="31" font-weight="800" fill="{TEXT}">{escape(NAME.split(" ", 1)[-1])}</text>'
+             f'<text x="36" y="188" font-size="12.5" fill="{MINE}">CS student · {escape(SCHOOL.split(" · ")[0])}</text>'
+             f'<text x="36" y="207" font-size="12" fill="{MUTED}">I read big codebases and send fixes upstream.</text></g>')
+    n = max(m_all + o_all + c_all, 1)
+    bx, by, bw = 36, 250, 250
+    bar = []
+    x = bx
+    for cnt, col in ((m_all, STATUS["merged"]), (o_all, STATUS["open"]), (c_all, CLOSED)):
+        if cnt:
+            w = bw * cnt / n
+            bar.append(f'<rect x="{x:.1f}" y="{by + 10}" width="{max(w - 2, 2):.1f}" height="7" rx="3.5" fill="{col}"/>')
+            x += w
+    o.append(f'<g class="mono in" style="animation-delay:.4s">'
+             f'<text x="{bx}" y="{by}" font-size="22" font-weight="800" fill="{TEXT}">{m_all}<tspan fill="{MUTED}" font-size="15">/{n}</tspan></text>'
+             f'<text x="{bx + 70}" y="{by - 2}" font-size="11.5" fill="{MUTED}">PRs merged upstream</text>' + "".join(bar) +
+             f'<text x="{bx}" y="{by + 34}" font-size="10.5"><tspan fill="{STATUS["merged"]}">● {m_all} merged</tspan>   '
+             f'<tspan fill="{STATUS["open"]}">● {o_all} in review</tspan>   <tspan fill="{CLOSED}">● {c_all} closed</tspan></text></g>')
+    tiles = [(str(s["repos"]), "open-source projects", ADD),
+             (f"+{s['adds']}", f"lines in · −{s['dels']} out", ADD),
+             (f"{kstars(s['reach'])}★", "stars on what I touched", MINE)]
+    for i, (big, small, col) in enumerate(tiles):
+        y = 316 + i * 44
+        o.append(f'<g class="mono in" style="animation-delay:{.6 + i * .12:.2f}s">'
+                 f'<rect x="36" y="{y}" width="250" height="36" rx="9" fill="{PANEL}" fill-opacity=".7" stroke="{LINE}"/>'
+                 f'<rect x="36" y="{y}" width="3" height="36" rx="1.5" fill="{col}"/>'
+                 f'<text x="50" y="{y + 24}" font-size="17" font-weight="800" fill="{TEXT}">{escape(big)}</text>'
+                 f'<text x="130" y="{y + 23}" font-size="11" fill="{MUTED}">{escape(small)}</text></g>')
 
-    # ---- bottom: a ticker of every PR
-    items = []
-    for p in pulls:
-        mark = {"merged": "✔ merged", "open": "◷ review", "closed": "✕ closed"}.get(p["status"], p["status"])
-        items.append((mark, STATUS.get(p["status"], MUTED), f'{short(p["repo"])}#{p["number"]}', clip(p["title"], 60)))
-    chars = sum(len(a) + len(b) + len(c) + 12 for a, _, b, c in items)
-    L = round(chars * 7.2)
+    # ---- place planets: each on its ring, at the angle that keeps it and its tag clear of the others
+    def label_parts(r):
+        st = stats[r]
+        parts = [(short(r), TEXT)]
+        if st["merged"]:
+            parts.append((f"✔{st['merged']}", STATUS["merged"]))
+        if st["open"]:
+            parts.append((f"◷{st['open']}", STATUS["open"]))
+        if st["closed"]:
+            parts.append((f"✕{st['closed']}", CLOSED))
+        return parts
 
-    def strip(x0):
-        parts = [f'<text x="{x0}" y="{H - 17}" font-size="12" class="mono" textLength="{L}" lengthAdjust="spacing">']
-        for mark, color, ref, title in items:
-            parts.append(f'<tspan fill="{color}">{escape(mark)}  </tspan><tspan fill="{MINE}">{escape(ref)}  </tspan>'
-                         f'<tspan fill="{MUTED}">{escape(title)}   ✦   </tspan>')
-        parts.append("</text>")
-        return "".join(parts)
+    def geometry(i, r, a):
+        rad = RADII[i % len(RADII)] + (i // len(RADII)) * 10
+        x, y = cx + rad * math.cos(a), cy + rad * T * math.sin(a)
+        depth = math.sin(a)
+        pr = (5 + 1.9 * math.log10(repos.get(r, {}).get("stars", 0) + 1)) * (0.82 + 0.18 * (depth + 1) / 2)
+        parts = label_parts(r)
+        wlen = sum(len(t) + (1 if j else 0) for j, (t, _) in enumerate(parts)) * 6.1 + 14
+        out = 1 if x >= cx else -1
+        if out < 0 and x - pr - 16 - wlen < LEFT_EDGE:
+            out = 1
+        lx = x + out * (pr + 16)
+        ly = y + (pr * .2 if depth >= 0 else -pr * .2)
+        rx = lx if out > 0 else lx - wlen
+        return dict(x=x, y=y, depth=depth, pr=pr, out=out, lx=lx, ly=ly, rx=rx, wlen=wlen, parts=parts)
 
-    o.append(f'<line x1="0" y1="{H - 44}" x2="{W}" y2="{H - 44}" stroke="{LINE}"/>'
-             f'<rect x="1" y="{H - 43}" width="{W - 2}" height="42" fill="{BG2}"/>'
-             f'<g clip-path="url(#tick)"><g class="ticker" style="--d:{L / 38:.0f}s;--l:-{L}px">{strip(24)}{strip(24 + L)}</g></g>'
-             f'<rect x="1" y="{H - 43}" width="{W - 2}" height="42" fill="url(#edge)"/>'
-             f'<rect x="12" y="{H - 33}" width="44" height="22" rx="5" fill="{MINE}"/>'
-             f'<text x="34" y="{H - 18}" font-size="11" font-weight="800" text-anchor="middle" fill="#1a1205" class="mono">LIVE</text>')
+    def boxes(g):
+        return [(g["x"] - g["pr"] - 10, g["y"] - g["pr"] - 6, g["x"] + g["pr"] + 10, g["y"] + g["pr"] + 6),
+                (g["rx"] - 2, g["ly"] - 11, g["rx"] + g["wlen"] + 2, g["ly"] + 10)]
 
-    return svg(W, H, "".join(o), f"{NAME}: {s['n']} pull requests to {s['repos']} projects, {s['merged']} merged", defs)
+    def overlap(a, b):
+        return max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(0, min(a[3], b[3]) - max(a[1], b[1]))
+
+    sun_box = (cx - 40, cy - 40, cx + 40, cy + 40)
+    placed, taken = [], []
+    for i, r in enumerate(order):
+        best = None
+        for step in range(48):
+            a = step * 2 * math.pi / 48 + i * .37
+            g = geometry(i, r, a)
+            bx_ = boxes(g)
+            cost = sum(overlap(b, t) for b in bx_ for t in taken) * 4
+            cost += sum(overlap(b, sun_box) for b in bx_) * 2
+            cost += max(0, (g["rx"] + g["wlen"]) - (W - 8)) * 40 + max(0, LEFT_EDGE - g["rx"]) * 40
+            cost += max(0, 60 - g["ly"]) * 40 + max(0, g["ly"] - (H - 40)) * 40
+            if best is None or cost < best[0]:
+                best = (cost, g)
+        g = best[1]
+        placed.append((i, r, g))
+        taken += boxes(g)
+
+    def draw(i, r, g):
+        st, c = stats[r], colour[r]
+        x, y, pr = g["x"], g["y"], g["pr"]
+        out = [f'<g class="in" style="animation-delay:{.3 + .08 * i:.2f}s" opacity="{1 if g["depth"] >= 0 else .8}">'
+               f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{pr * 1.9:.1f}" fill="{c}" opacity=".22" filter="url(#soft)"/>']
+        ringed = i == 0 or st["merged"] + st["open"] + st["closed"] >= 4
+        if ringed:
+            out.append(f'<path d="M{x - pr * 2.1:.1f},{y:.1f} A{pr * 2.1:.1f},{pr * .6:.1f} 0 0 1 {x + pr * 2.1:.1f},{y:.1f}" fill="none" stroke="#d6c4ff" stroke-opacity=".55" stroke-width="2"/>')
+        out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{pr:.1f}" fill="url(#pl{i})"/>'
+                   f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{pr:.1f}" fill="none" stroke="#fff" stroke-opacity=".18"/>')
+        if ringed:
+            out.append(f'<path d="M{x - pr * 2.1:.1f},{y:.1f} A{pr * 2.1:.1f},{pr * .6:.1f} 0 0 0 {x + pr * 2.1:.1f},{y:.1f}" fill="none" stroke="#d6c4ff" stroke-opacity=".8" stroke-width="2"/>')
+        moons = [STATUS["merged"]] * st["merged"] + [STATUS["open"]] * st["open"] + [CLOSED] * st["closed"]
+        mr = pr + 7
+        out.append(f'<ellipse cx="{x:.1f}" cy="{y:.1f}" rx="{mr:.1f}" ry="{mr * .45:.1f}" fill="none" stroke="#fff" stroke-opacity=".10"/>')
+        for k, col in enumerate(moons):
+            a = math.pi * 1.15 + k * (2 * math.pi / max(len(moons), 1))
+            out.append(f'<circle cx="{x + mr * math.cos(a):.1f}" cy="{y + mr * .45 * math.sin(a):.1f}" r="3.1" fill="{col}" stroke="#05060f" stroke-width="1.2"/>')
+        txt = "".join(f'<tspan fill="{col}">{" " if j else ""}{escape(t)}</tspan>' for j, (t, col) in enumerate(g["parts"]))
+        out.append(f'<line x1="{x + g["out"] * pr * .9:.1f}" y1="{y:.1f}" x2="{g["lx"]:.1f}" y2="{g["ly"]:.1f}" stroke="{c}" stroke-opacity=".5"/>'
+                   f'<rect x="{g["rx"]:.1f}" y="{g["ly"] - 9:.1f}" width="{g["wlen"]:.1f}" height="17" rx="8.5" fill="#0b1020" fill-opacity=".85" stroke="{c}" stroke-opacity=".45"/>'
+                   f'<text x="{g["rx"] + 7:.1f}" y="{g["ly"] + 3.5:.1f}" font-size="10" class="mono">{txt}</text></g>')
+        return "".join(out)
+
+    for rad in RADII:
+        o.append(f'<path d="M{cx - rad},{cy} A{rad},{rad * T:.1f} 0 0 1 {cx + rad},{cy}" fill="none" stroke="url(#orbBack)" stroke-width="1.2"/>')
+    o += [draw(i, r, g) for i, r, g in sorted(placed, key=lambda t: t[2]["depth"]) if g["depth"] < 0]
+    o.append(f'<circle cx="{cx}" cy="{cy}" r="78" fill="url(#corona)"><animate attributeName="r" values="74;84;74" dur="5s" repeatCount="indefinite"/></circle>'
+             f'<circle cx="{cx}" cy="{cy}" r="31" fill="url(#sun)"/>'
+             f'<text x="{cx}" y="{cy + 5}" font-size="13.5" font-weight="800" text-anchor="middle" fill="#3b1d04" class="mono">HVJ</text>')
+    for rad in RADII:
+        o.append(f'<path d="M{cx - rad},{cy} A{rad},{rad * T:.1f} 0 0 0 {cx + rad},{cy}" fill="none" stroke="url(#orbFront)" stroke-width="1.3"/>')
+    o += [draw(i, r, g) for i, r, g in sorted(placed, key=lambda t: t[2]["depth"]) if g["depth"] >= 0]
+    o.append(f'<g class="mono" font-size="10.5" fill="{MUTED}"><text x="{W - 400}" y="{H - 18}">each moon is a PR:</text>'
+             f'<circle cx="{W - 262}" cy="{H - 22}" r="4" fill="{STATUS["merged"]}"/><text x="{W - 253}" y="{H - 18}">merged</text>'
+             f'<circle cx="{W - 188}" cy="{H - 22}" r="4" fill="{STATUS["open"]}"/><text x="{W - 179}" y="{H - 18}">in review</text>'
+             f'<circle cx="{W - 100}" cy="{H - 22}" r="4" fill="{CLOSED}"/><text x="{W - 91}" y="{H - 18}">closed</text></g>')
+    return svg(W, H, "".join(o), f"{NAME}: {s['n']} pull requests to {s['repos']} projects, {m_all} merged, {o_all} in review, {c_all} closed", "".join(defs))
 
 
 # ================================================================ telemetry
@@ -375,11 +390,9 @@ def telemetry(pulls, repos):
 </style>"""
     o = [frame(W, H, "git diff --stat upstream")]
 
-    # section titles
     for x, label in [(36, "LINES CHANGED, BY LANGUAGE"), (380, "PER PROJECT"), (712, "HOW MUCH IS TESTS")]:
         o.append(f'<text x="{x}" y="70" font-size="10.5" letter-spacing="1.5" fill="{DIM}" class="mono">{label}</text>')
 
-    # donut
     dx, dy, R = 118, 170, 68
     o.append(f'<circle cx="{dx}" cy="{dy}" r="{R}" fill="none" stroke="{PANEL}" stroke-width="18"/>')
     a = -math.pi / 2
@@ -400,7 +413,6 @@ def telemetry(pulls, repos):
                  f'<text x="232" y="{y}" fill="{TEXT}">{escape(lg)}</text>'
                  f'<text x="340" y="{y}" text-anchor="end" fill="{MUTED}">{100 * n / total:.0f}%</text></g>')
 
-    # per project bars
     rows = sorted(per.items(), key=lambda kv: -(kv[1][0] + kv[1][1]))[:6]
     peak = max((a + d for a, d in per.values()), default=1) or 1
     for i, (repo, (a_, d_)) in enumerate(rows):
@@ -412,7 +424,6 @@ def telemetry(pulls, repos):
                  f'<rect x="{490 + w_a:.1f}" y="{y - 6}" width="{w_d:.1f}" height="12" rx="0" fill="{DEL}" class="grow" style="animation-delay:{.5 + i * .1:.2f}s"/>'
                  f'<text x="648" y="{y + 4}" font-size="10.5" fill="{MUTED}"><tspan fill="{ADD}">+{a_}</tspan> <tspan fill="{DEL}">−{d_}</tspan></text></g>')
 
-    # test gauge
     gx, gy, gr = 792, 196, 66
     o.append(f'<path d="{arc(gx, gy, gr, math.pi, 2 * math.pi)}" fill="none" stroke="{PANEL}" stroke-width="14" stroke-linecap="round"/>')
     length = gr * math.pi * test_share
@@ -428,7 +439,6 @@ def telemetry(pulls, repos):
              f'<g class="mono" text-anchor="middle"><text x="{gx}" y="{gy + 30}" font-size="24" font-weight="700" fill="{TEXT}">{100 * test_share:.0f}%</text>'
              f'<text x="{gx}" y="{gy + 48}" font-size="11" fill="{MUTED}">of added lines are tests</text></g>')
 
-    # footer facts
     med = span(s["median"]) if s["median"] is not None else "—"
     facts = [f"{s['files']} files touched", f"median time to merge {med}", f"{s['repos']} codebases", f"{len(langs)} languages"]
     o.append(f'<line x1="24" y1="{H - 36}" x2="{W - 24}" y2="{H - 36}" stroke="{LINE}"/>')
@@ -438,10 +448,6 @@ def telemetry(pulls, repos):
 
 
 # ================================================================ timeline
-
-SKY = ["#a78bfa", "#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#38bdf8",
-       "#f97316", "#facc15", "#c084fc", "#2dd4bf", "#fb7185", "#a3e635"]
-
 
 def star_shape(x, y, r, color):
     pts = []
@@ -488,7 +494,6 @@ def timeline(pulls, now):
     for i in range(90):
         cls = ' class="bg" style="animation-delay:%.1fs"' % rng.uniform(0, 4) if i % 6 == 0 else f' opacity="{rng.uniform(.1, .45):.2f}"'
         o.append(f'<circle cx="{rng.uniform(8, W - 8):.0f}" cy="{rng.uniform(8, H - 8):.0f}" r="{rng.choice([.4, .6, .8])}" fill="#fff"{cls}/>')
-    # date axis along the bottom, one label a week, like the other cards
     ay = H - 22
     d = t0.replace(hour=0, minute=0, second=0)
     d += timedelta(days=(7 - d.weekday()) % 7)
@@ -577,8 +582,10 @@ def log(pulls, now):
         color = STATUS.get(p["status"], MUTED)
         label = {"merged": "merged", "open": "review", "closed": "closed"}.get(p["status"], p["status"])
         merged = p["status"] == "merged" and p.get("merged")
-        hours = ((ts(p["merged"]) if merged else now) - ts(p["created"])).total_seconds() / 3600
-        when = ("✔ " if merged else "◷ ") + span(hours)
+        closed = p["status"] == "closed"
+        end = ts(p["merged"]) if merged else (ts(p.get("closed") or p["created"]) if closed else now)
+        hours = (end - ts(p["created"])).total_seconds() / 3600
+        when = ("✔ " if merged else "✕ " if closed else "◷ ") + span(hours)
         wa = 56 * p["adds"] / peak
         wd = 56 * p["dels"] / peak
         o.append(
