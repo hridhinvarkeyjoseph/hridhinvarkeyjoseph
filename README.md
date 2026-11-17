@@ -14,7 +14,8 @@ CS student at Newton School of Technology, S-VYASA campus, Bengaluru.
 I learn by reading big codebases, fixing real bugs and sending the fixes upstream:
 shell performance and tests in nvm, terminal links in VS Code, retries in icechunk,
 regression tests in linkml, and database fixes in libredb-studio.
-Now contributing to Sugar Labs (sugar-ai) and OpenStreetMap.
+Now working towards GSoC 2027 in biology + code: Cytoscape (NRNB),
+MGnify (EMBL-EBI), NiMARE (INCF) and UC OSPO research software.
 ```
 
 <img src="assets/telemetry.svg" alt="What my pull requests changed: lines by language, lines per project, and the share of added lines that are tests" width="100%">
